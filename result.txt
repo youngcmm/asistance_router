@@ -1,0 +1,8 @@
+Train Loss: 0.1278
+Val Loss: 0.1248
+Hamming Loss: 0.0442
+F1 Macro: 0.1083
+F1 Micro: 0.4180
+Precision: 0.2495
+Recall: 0.0844
+New best model saved with F1 Macro: 0.1083
