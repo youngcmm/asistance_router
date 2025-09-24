@@ -97,3 +97,76 @@ class LLM:
                 cleaned_drugs.append(drug)
         
         return list(set(cleaned_drugs))  # 去重
+
+    def with_structured_output(self, schema):
+        """
+        增强LLM以支持结构化输出
+        
+        Args:
+            schema: 输出结构的模式定义（例如Route类）
+            
+        Returns:
+            一个可以处理结构化输出的对象
+        """
+        # 创建一个包装器类来处理结构化输出
+        class StructuredOutputHandler:
+            def __init__(self, llm, schema):
+                self.llm = llm
+                self.schema = schema
+                
+            def invoke(self, messages):
+                # 将消息转换为提示词
+                system_message = ""
+                human_message = ""
+                
+                for message in messages:
+                    if hasattr(message, 'content') and hasattr(message, 'type'):
+                        if message.type == "system":
+                            system_message = message.content
+                        elif message.type == "human":
+                            human_message = message.content
+                
+                # 构建用于结构化输出的提示词
+                prompt = f"{system_message}\n\n{human_message}\n\n请以JSON格式输出，符合以下模式：{self.schema.__name__}\n"
+                prompt += "输出格式示例：{\"step\": \"开药\"} 或 {\"step\": \"知识问答\"} 或 {\"step\": \"相似病案检索\"}\n输出："
+                
+                # 获取模型响应
+                response = self.llm.response(prompt, max_new_tokens=100, temperature=0.1)
+                
+                # 提取JSON部分
+                import json
+                import re
+                
+                # 尝试从响应中提取JSON
+                json_match = re.search(r'\{[^}]+\}', response)
+                if json_match:
+                    try:
+                        result_dict = json.loads(json_match.group())
+                        # 创建schema实例
+                        result = self.schema()
+                        if 'step' in result_dict:
+                            result.step = result_dict['step']
+                        return result
+                    except json.JSONDecodeError:
+                        pass
+                
+                # 如果无法解析JSON，尝试直接匹配关键词
+                response_lower = response.lower()
+                if '"step"' in response_lower:
+                    if '开药' in response_lower or '开药' in response:
+                        result = self.schema()
+                        result.step = '开药'
+                        return result
+                    elif '知识问答' in response_lower or '知识问答' in response:
+                        result = self.schema()
+                        result.step = '知识问答'
+                        return result
+                    elif '相似病案' in response_lower or '相似病案' in response:
+                        result = self.schema()
+                        result.step = '相似病案检索'
+                        return result
+                
+                # 默认返回空的schema实例
+                return self.schema()
+        
+        return StructuredOutputHandler(self, schema)
